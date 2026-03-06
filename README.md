@@ -26,15 +26,16 @@
 
 ## 🚀 核心能力
 
-### 覆盖 10 种插件场景
+### 覆盖 11 种插件场景
 | 场景 | 基类 (Base Class) | 核心用途 |
 | :--- | :--- | :--- |
 | **操作插件** | `AbstractOperationServicePlugIn` | [核心] 数据校验、事务处理、跨表同步 |
-| **表单插件** | `AbstractBillPlugIn` | [核心] 界面联动、控件锁定、事件监听 |
-| **列表插件** | `AbstractListPlugin` | 动态列、数据格式化、自定义过滤 |
+| **表单插件** | `AbstractBillPlugIn` | [核心] 界面联动、控件锁定、F7过滤、弹窗传参 |
+| **列表插件** | `AbstractListPlugin` | 动态列、数据格式化、自定义过滤、超链接跳转 |
 | **转换插件** | `AbstractConvertPlugIn` | 单据下推、字段映射、分单逻辑 |
-| **报表插件** | `AbstractReportForm/ListDataPlugin` | 报表取数与交互控制 |
-| **工作流插件** | `WorkflowPlugin` | 审批流逻辑干预 |
+| **报表插件** | `AbstractReportForm/ListDataPlugin` | 报表取数、DataSet分组统计、条件样式 |
+| **工作流插件** | `WorkflowPlugin / IWorkflowPlugin` | 审批流逻辑干预、动态审批人 |
+| **调度任务** | `AbstractTask` | 定时任务、状态巡检、消息通知 |
 | **打印/进出口** | `BatchImportPlugin` | 打印格式、数据导入导出校验 |
 
 ---
@@ -77,9 +78,9 @@ Copy-Item -Path ".\*" -Destination "$env:USERPROFILE\.claude\skills\kingscript-p
 
 | 文档 | 说明 |
 | :--- | :--- |
-| [**SKILL.md**](SKILL.md) | **核心技术文档** - 包含所有基类、生命周期、API 字典及代码模式 |
+| [**SKILL.md**](SKILL.md) | **核心路由文档** - 插件速查表、关键原则、API 字典、文档索引 |
 | [QUICKSTART.md](QUICKSTART.md) | 3 分钟上手实战指南 |
-| [references/](references/) | 专项手册：[ORM接口](references/data-service.md)、[表单交互](references/form-plugin.md)、[常见场景库](references/common-examples.md) |
+| [references/](references/) | 专项手册：[操作插件](references/operation-plugin.md)、[表单插件](references/form-plugin.md)、[列表插件](references/list-plugin.md)、[转换插件](references/convert-plugin.md)、[报表插件](references/report-plugin.md)、[其他插件](references/other-plugins.md)、[ORM接口](references/data-service.md)、[BigDecimal](references/bigdecimal.md)、[常见案例](references/common-examples.md) |
 | [scripts/](scripts/) | 基础模板：[表单模板](scripts/form-plugin-template.ts)、[操作模板](scripts/operation-plugin-template.ts) |
 
 ---

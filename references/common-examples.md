@@ -1,5 +1,22 @@
 # 常见开发案例
 
+## 目录
+
+- [基础操作示例](#基础操作示例) - 字段取值赋值、基础资料、单据体操作
+- [查询操作示例](#查询操作示例) - load/query/QFilter/缓存查询
+- [保存操作示例](#保存操作示例) - 新增、修改、删除、调用操作
+- [消息通知示例](#消息通知示例) - 系统通知、消息中心
+- [控件操作示例](#控件操作示例) - 工具栏、可见性、锁定性、F7、下载
+- [日期处理示例](#日期处理示例) - 日期加减、格式化
+- [数值计算示例](#数值计算示例) - BigDecimal 财务精确计算
+- [弹出窗体示例](#弹出窗体示例) - 详情页、弹窗传参、子页面校验保存、防重复操作
+- [多语言处理示例](#多语言处理示例) - LocaleString
+- [性能优化建议](#性能优化建议) - 查询/保存/事务优化
+- [调试技巧](#调试技巧) - console/debugger/错误捕获
+- [错误处理示例](#错误处理示例) - 统一错误处理、操作结果验证
+
+---
+
 ## 基础操作示例
 
 ### 1. 单选头字段操作
@@ -510,54 +527,220 @@ let dateStr = `${year}-${month}-${day}`;
 
 ## 数值计算示例
 
+财务相关的金额、数量、单价计算**必须使用 BigDecimal**，禁止使用 number 类型（详见 [bigdecimal.md](bigdecimal.md)）。
+
 ```typescript
-// 金额计算（注意精度问题）
-let qty = this.getModel().getValue("qtyfield", rowIndex) || 0;
-let price = this.getModel().getValue("pricefield", rowIndex) || 0;
-let amount = qty * price;
+// 分录行：数量 x 单价 = 金额
+let qty = this.getModel().getValue("qtyfield", rowIndex) as BigDecimal;
+let price = this.getModel().getValue("pricefield", rowIndex) as BigDecimal;
 
-// 设置金额（保留两位小数）
-this.getModel().setValue("amountfield", Number(amount.toFixed(2)), rowIndex);
+if (qty != null && price != null) {
+  let amount = qty.multiply(price).setScale(2, BigDecimal.ROUND_HALF_UP);
+  this.getModel().setValue("amountfield", amount, rowIndex);
+}
 
-// 汇总计算
-let totalAmount = 0;
+// 汇总计算：遍历分录汇总金额
+let totalAmount = BigDecimal.ZERO;
 let entryCount = this.getModel().getEntryRowCount("entryentity");
 for (let i = 0; i < entryCount; i++) {
-  totalAmount += this.getModel().getValue("amountfield", i) || 0;
+  let amt = this.getModel().getValue("amountfield", i) as BigDecimal;
+  if (amt != null) {
+    totalAmount = totalAmount.add(amt);
+  }
 }
-this.getModel().setValue("totalamount", Number(totalAmount.toFixed(2)));
+this.getModel().setValue("totalamount", totalAmount);
+
+// 税额计算
+let taxRate = new BigDecimal("0.13");
+let taxAmount = totalAmount.multiply(taxRate).setScale(2, BigDecimal.ROUND_HALF_UP);
+let amountWithTax = totalAmount.add(taxAmount);
 ```
 
 ## 弹出窗体示例
 
+### 1. 打开单据详情
+
 ```typescript
 import { BillShowParameter } from "@cosmic/bos-core/kd/bos/bill";
-import { ShowType } from "@cosmic/bos-core/kd/bos/form";
+import { ShowType, OperationStatus } from "@cosmic/bos-core/kd/bos/form";
 
-// 打开单据详情
 openBillDetail(pkid: number): void {
   let billPara = new BillShowParameter();
-  billPara.setPkId(pkid); // 设置主键
-  billPara.setFormId("your_bill_entity"); // 设置表单标识
-  billPara.getOpenStyle().setShowType(ShowType.Modal); // 模态窗口
+  billPara.setPkId(pkid);
+  billPara.setFormId("your_bill_entity");
+  billPara.getOpenStyle().setShowType(ShowType.Modal);
+  billPara.setStatus(OperationStatus.VIEW); // 只读查看模式
   this.getView().showForm(billPara);
 }
+```
 
-// 打开表单并传递参数
-openCustomPage(): void {
-  let para = new FormShowParameter();
-  para.setFormId("your_custom_form");
-  para.setCustomParam("param1", "value1"); // 传递自定义参数
-  para.setCustomParam("param2", 123);
-  
-  // 设置回调函数
-  para.setCloseCallBack(new CloseCallBack(this, "refreshCallback"));
-  
-  this.getView().showForm(para);
+### 2. 打开动态表单并传递业务参数
+
+适用于"操作页面"场景，如入库操作、出库操作等弹窗。父页面传递参数，子页面接收后初始化数据。
+
+**父页面（发起方）**：
+```typescript
+import { FormShowParameter } from "@cosmic/bos-core/kd/bos/form";
+import { ShowType } from "@cosmic/bos-core/kd/bos/form";
+import { HashMap } from "@cosmic/bos-script/java/util";
+
+itemClick(evt: ItemClickEvent): void {
+  if ("kdec_warehouse_op" === evt.getItemKey()) {
+    let formShowParameter = new FormShowParameter();
+    formShowParameter.setFormId("kdec_in_warehouse");  // 目标动态表单标识
+    formShowParameter.setCaption("入库操作");
+    formShowParameter.getOpenStyle().setShowType(ShowType.Modal);
+
+    // 构造传递参数
+    let cusParams = new HashMap();
+    cusParams.put("billno", this.getModel().getValue("billno"));
+
+    // 传递基础资料字段的ID
+    let warehouseObj = this.getModel().getValue("kdec_warehouse") as DynamicObject;
+    if (warehouseObj != null) {
+      cusParams.put("warehouse_id", warehouseObj.getLong("id"));
+    }
+
+    // 传递单据体数据（序列化为JSON字符串）
+    let entryData = this.getModel().getEntryEntity("kdec_pro_entry");
+    let productList = new ArrayList();
+    for (let entry of entryData) {
+      let item = new HashMap();
+      item.put("product_id", entry.getDynamicObject("kdec_product").getLong("id"));
+      item.put("qty", entry.get("kdec_quantity"));
+      productList.add(item);
+    }
+    cusParams.put("products", JSON.stringify(productList));
+
+    formShowParameter.setCustomParams(cusParams);
+    this.getView().showForm(formShowParameter);
+  }
+}
+```
+
+**子页面（接收方）**：在 `afterCreateNewData` 中接收参数并初始化数据
+```typescript
+afterCreateNewData(e: EventObject): void {
+  super.afterCreateNewData(e);
+
+  // 获取父页面传递的参数
+  let customParams = this.getView().getFormShowParameter().getCustomParams();
+
+  if (customParams != null) {
+    // 设置单据头字段
+    let billno = customParams.get("billno");
+    this.getModel().setValue("kdec_billno", billno);
+
+    // 设置基础资料字段（通过ID赋值）
+    let warehouseId = customParams.get("warehouse_id");
+    if (warehouseId != null) {
+      this.getModel().setValue("kdec_in_warehouse", warehouseId);
+    }
+
+    // 创建单据体行并填充
+    let productsJson = customParams.get("products") as string;
+    if (productsJson) {
+      let products = JSON.parse(productsJson);
+      for (let i = 0; i < products.length; i++) {
+        this.getModel().createNewEntryRow("kdec_entryentity");
+        this.getModel().setValue("kdec_product", products[i].product_id, i);
+        this.getModel().setValue("kdec_in_warehouse_count", products[i].qty, i);
+      }
+    }
+  }
+}
+```
+
+### 3. 子页面校验、保存数据并关闭
+
+在动态表单弹窗中，点击确定按钮时校验必填、创建业务数据并保存。
+
+```typescript
+import { BusinessDataServiceHelper } from "@cosmic/bos-core/kd/bos/servicehelper";
+import { OperationServiceHelper } from "@cosmic/bos-core/kd/bos/servicehelper/operation";
+
+// 确定按钮点击前校验
+beforeClick(evt: any): void {
+  super.beforeClick(evt);
+  let control = evt.getSource();
+
+  if ("btnok" === control.getKey()) {
+    let inTime = this.getModel().getValue("kdec_in_warehouse_time");
+    if (inTime == null) {
+      this.getView().showTipNotification("请填写入库时间");
+      evt.setCancel(true);
+      return;
+    }
+
+    // 校验单据体仓位是否已填写
+    let entries = this.getModel().getEntryEntity("kdec_entryentity");
+    for (let entry of entries) {
+      if (entry.get("kdec_warehouse_position") == null) {
+        this.getView().showTipNotification("请填写入库仓位");
+        evt.setCancel(true);
+        break;
+      }
+    }
+  }
 }
 
-// 接收回调
-// TODO: 需要在refreshCallback方法中处理
+// 校验通过后，创建业务数据并保存
+click(evt: any): void {
+  super.click(evt);
+  let control = evt.getSource();
+
+  if ("btnok" === control.getKey()) {
+    let entries = this.getModel().getEntryEntity("kdec_entryentity");
+    let dataList = [];
+
+    for (let entry of entries) {
+      // 创建出入库单数据包
+      let inventoryObj = BusinessDataServiceHelper.newDynamicObject("kdec_inventory");
+      inventoryObj.set("kdec_warehouse_billno", this.getModel().getValue("kdec_billno"));
+      inventoryObj.set("kdec_warehouse", this.getModel().getValue("kdec_in_warehouse"));
+      inventoryObj.set("kdec_warehouse_position", entry.get("kdec_warehouse_position"));
+      inventoryObj.set("kdec_product", entry.get("kdec_product"));
+      inventoryObj.set("kdec_type", "purchase_inventory");
+      inventoryObj.set("kdec_count", entry.get("kdec_in_warehouse_count"));
+      inventoryObj.set("kdec_operatetime", new Date());
+      inventoryObj.set("kdec_operator", this.getModel().getValue("kdec_in_warehouse_user"));
+      inventoryObj.set("billstatus", "A");
+      dataList.push(inventoryObj);
+    }
+
+    // 调用保存操作
+    let result = OperationServiceHelper.executeOperate(
+      "save", "kdec_inventory", dataList, OperateOption.create()
+    );
+
+    if (result.isSuccess()) {
+      this.getView().close();  // 关闭弹窗
+      this.getView().showMessage("入库成功");
+    }
+  }
+}
+```
+
+### 4. 操作前校验：防止重复操作
+
+在执行操作前，检查数据库中是否已存在相关记录，避免重复操作。
+
+```typescript
+beforeItemClick(evt: any): void {
+  super.beforeItemClick(evt);
+
+  if ("kdec_warehouse_op" === evt.getItemKey()) {
+    // 检查是否已有出入库记录
+    let billno = this.getModel().getValue("billno") as string;
+    let qFilter = new QFilter("kdec_warehouse_billno", QCP.equals, billno);
+    let exists = QueryServiceHelper.exists("kdec_inventory", [qFilter]);
+
+    if (exists) {
+      this.getView().showErrorNotification("正在出库或已完成出库，请勿重复操作");
+      evt.setCancel(true);
+    }
+  }
+}
 ```
 
 ## 多语言处理示例

@@ -1,5 +1,15 @@
 # 表单插件开发参考
 
+## 目录
+
+- [概述](#概述) - 插件基类
+- [插件事件总览](#插件事件总览) - 打开前/初始化/交互/关闭事件表
+- [常见事件详解](#常见事件详解) - preOpenForm、afterCreateNewData、afterLoadData、afterBindData、itemClick、beforeF7Select、propertyChanged 等
+- [父子页面弹窗及交互](#父子页面弹窗及交互) - 弹窗传参、CloseCallBack 回调
+- [关键API汇总](#关键api汇总) - 模型/视图/上下文 API
+
+---
+
 ## 概述
 
 表单插件是表单页面加载和运行时执行的插件，可以在表单插件中对表单页面的前端样式和实体数据进行处理。
@@ -130,6 +140,42 @@ afterCreateNewData(e: EventObject): void {
 **重要**：要对字段赋值，首先要找到对应的字段标识。在表单设计器中单击对应字段，在右侧业务属性中查看字段标识。
 
 **关键字段设置**：当通过 `setValue` 给单据体字段赋值时，如果用户没有在界面编辑字段，保存时会清空数据。需要在单据体右侧的业务属性中设置**关键字段**（如物料字段），这样代码给关键字段赋值后，点击保存会保留当前分录行。
+
+### afterLoadData - 编辑加载后
+
+**触发时机**：编辑已有单据，数据加载完成后。仅编辑/查看模式触发，新增不触发。
+
+**与 afterCreateNewData 互斥**：新增时触发 `afterCreateNewData`，编辑时触发 `afterLoadData`。
+
+**应用场景**：根据已有数据控制界面状态、显示计算结果、初始化编辑模式特有逻辑
+
+**示例**：
+```typescript
+afterLoadData(e: EventObject): void {
+  // 根据单据状态控制界面
+  let status = this.getModel().getValue("billstatus") as string;
+  if (status === "C") {
+    // 已审核：锁定关键字段
+    this.getView().setEnable(false, "kdtest_remark");
+    this.getView().setEnable(false, "kdtest_currencyfield");
+  }
+
+  // 显示计算结果
+  let total = BigDecimal.ZERO;
+  let rowCount = this.getModel().getEntryRowCount("kdtest_reqentryentity");
+  for (let i = 0; i < rowCount; i++) {
+    let amt = this.getModel().getValue("kdtest_amountfield", i) as BigDecimal;
+    if (amt != null) {
+      total = total.add(amt);
+    }
+  }
+  this.getModel().setValue("kdtest_totalamount", total);
+
+  super.afterLoadData(e);
+}
+```
+
+**注意**：如果在 `afterLoadData` 中修改了字段值，这些修改会被标记为脏数据，关闭页面时系统会提示"是否保存"。如果只是显示用途，考虑使用控件直接设值而非模型字段。
 
 ### afterBindData - 控件更新
 
@@ -337,21 +383,74 @@ afterDoOperation(e: $.kd.bos.form.events.AfterDoOperationEventArgs): void {
 
 **应用场景**：物料选择弹出的F7列表数据过滤
 
-**示例**：
+**示例1：简单过滤**
 ```typescript
-// 实现BeforeF7SelectListener接口
 class DemoBillPlugin extends AbstractBillPlugIn implements BeforeF7SelectListener {
   registerListener(e: EventObject): void {
     let basedataEdit = this.getView().getControl("kdtest_materielfield") as BasedataEdit;
     basedataEdit.addBeforeF7SelectListener(this);
   }
-  
+
   beforeF7Select(evt: $.kd.bos.form.field.events.BeforeF7SelectEvent): void {
     if (evt.getProperty().getName() == "kdtest_materielfield") {
       let filter = new ArrayList();
-      filter.add(new QFilter("number", "like", "001.%")); // 编码以001.开头
-      filter.add(new QFilter("number", QCP.not_equals, "001.00002")); // 且不等于001.00002
+      filter.add(new QFilter("number", "like", "001.%"));
+      filter.add(new QFilter("number", QCP.not_equals, "001.00002"));
       evt.setCustomQFilters(filter);
+    }
+  }
+}
+```
+
+**示例2：分组基础资料左树过滤 + 右侧列表过滤**
+
+选择"产品属性"后，点击"产品类型"F7弹窗时，左树和列表只显示对应属性的数据。
+
+```typescript
+import { ListShowParameter } from "@cosmic/bos-core/kd/bos/list";
+
+class ProductInfoPlugin extends AbstractBillPlugIn implements BeforeF7SelectListener {
+  registerListener(e: EventObject): void {
+    let productCategory = this.getView().getControl("kdec_product_category") as BasedataEdit;
+    productCategory.addBeforeF7SelectListener(this);
+  }
+
+  beforeF7Select(evt: BeforeF7SelectEvent): void {
+    if (evt.getProperty().getName() === "kdec_product_category") {
+      let attributeObj = this.getModel().getValue("kdec_product_attribute") as DynamicObject;
+      if (attributeObj != null) {
+        let attributeId = attributeObj.getLong("id");
+        let attributeNumber = attributeObj.getString("number");
+
+        // 构造过滤条件
+        let listFilter = new QFilter("group.id", QCP.equals, attributeId);
+        let treeFilter = new QFilter("number", QCP.equals, attributeNumber);
+
+        // 获取F7弹窗参数
+        let showParameter = evt.getFormShowParameter() as ListShowParameter;
+
+        // 设置右侧列表过滤
+        showParameter.getListFilterParameter().getQFilters().add(listFilter);
+
+        // 设置左树过滤
+        showParameter.getTreeFilterParameter().getQFilters().add(treeFilter);
+      }
+    }
+  }
+}
+```
+
+**示例3：F7弹窗设置单选 + 按仓库过滤仓位**
+
+```typescript
+beforeF7Select(evt: BeforeF7SelectEvent): void {
+  if (evt.getProperty().getName() === "kdec_warehouse_position") {
+    let warehouseObj = this.getModel().getValue("kdec_in_warehouse") as DynamicObject;
+    if (warehouseObj != null) {
+      let qFilter = new QFilter("kdec_warehouse.id", QCP.equals, warehouseObj.getLong("id"));
+      let showParameter = evt.getFormShowParameter() as ListShowParameter;
+      showParameter.getListFilterParameter().setFilter(qFilter);
+      showParameter.setMultiSelect(false); // 强制单选
     }
   }
 }
@@ -365,11 +464,11 @@ class DemoBillPlugin extends AbstractBillPlugIn implements BeforeF7SelectListene
 
 **应用场景**：监控某字段变更时，同步处理其他业务逻辑
 
-**示例**：
+**示例1：字段联动**
 ```typescript
 propertyChanged(e: PropertyChangedArgs): void {
-  let changeSet = e.getChangeSet(); // 获取变更集合
-  
+  let changeSet = e.getChangeSet();
+
   // 部门变更时，自动带出公司
   if (e.getProperty().getName() == "kdtest_dept") {
     let departmennt = changeSet[0].getNewValue() as DynamicObject;
@@ -387,17 +486,64 @@ propertyChanged(e: PropertyChangedArgs): void {
       this.getView().setEnable(true, 0, "kdtest_pricefield");
     }
   }
-  // 单价变更时，设置金额可见性
-  else if (e.getProperty().getName() == "kdtest_pricefield") {
-    let price = changeSet[0].getNewValue() as BigDecimal;
-    if (price.compareTo(BigDecimal.ZERO) == 0) {
-      this.getView().setVisible(false, "kdtest_amountfield");
-    } else {
-      this.getView().setVisible(true, "kdtest_amountfield");
+
+  super.propertyChanged(e);
+}
+```
+
+**示例2：多字段拼接编码**
+
+选择所属仓库和填写仓位序号后，自动拼接生成仓位编码。
+
+```typescript
+propertyChanged(e: PropertyChangedArgs): void {
+  super.propertyChanged(e);
+
+  let fieldName = e.getProperty().getName();
+  if ("kdec_warehouse" === fieldName || "kdec_position_num" === fieldName) {
+    let positionNum = this.getModel().getValue("kdec_position_num") as string;
+    let warehouseObj = this.getModel().getValue("kdec_warehouse") as DynamicObject;
+
+    if (warehouseObj != null && positionNum != null && positionNum !== "") {
+      // 拼接编码：仓库编码 + "_" + 仓位序号
+      let code = warehouseObj.getString("number") + "_" + positionNum;
+      this.getModel().setValue("number", code);
     }
   }
-  
+}
+```
+
+**示例3：选择产品后自动查询供应商价格**
+
+```typescript
+propertyChanged(e: PropertyChangedArgs): void {
   super.propertyChanged(e);
+
+  if ("kdec_product" === e.getProperty().getName()) {
+    let rowIndex = e.getChangeSet()[0].getRowIndex();
+    let productObj = e.getChangeSet()[0].getNewValue() as DynamicObject;
+
+    if (productObj != null) {
+      let productId = productObj.getLong("id");
+      let supplierObj = this.getModel().getValue("kdec_supplier") as DynamicObject;
+
+      if (supplierObj != null) {
+        // 查询供应商价格表
+        let priceObj = QueryServiceHelper.queryOne(
+          "kdec_supplier_price",
+          "kdec_sup_price",
+          [
+            new QFilter("kdec_product.id", QCP.equals, productId),
+            new QFilter("kdec_supplier.id", QCP.equals, supplierObj.getLong("id"))
+          ]
+        );
+
+        if (priceObj != null) {
+          this.getModel().setValue("kdec_purchase_price", priceObj.get("kdec_sup_price"), rowIndex);
+        }
+      }
+    }
+  }
 }
 ```
 
@@ -419,6 +565,70 @@ itemClick(evt: $.kd.bos.form.control.events.ItemClickEvent): void {
     // 设置界面关闭时的回调函数
     fsp.setCloseCallBack(new CloseCallBack(plugin, "batchedit"));
     this.getView().showForm(fsp); // 调用前端接口打开界面
+  }
+}
+```
+
+### CloseCallBack - 子页面关闭回调
+
+父页面通过 `setCloseCallBack` 设置回调，子页面关闭时父页面的 `closedCallBack` 方法被触发，接收子页面返回的数据。
+
+**父页面设置回调**（与上方弹窗示例配合）：
+```typescript
+// 在打开弹窗前设置（已在上方示例中设置）
+fsp.setCloseCallBack(new CloseCallBack(plugin, "batchedit"));
+```
+
+**父页面接收回调**：
+```typescript
+closedCallBack(e: $.kd.bos.form.events.ClosedCallBackEvent): void {
+  let actionId = e.getActionId();
+
+  if (actionId === "batchedit") {
+    let returnData = e.getReturnData();
+    if (returnData != null) {
+      // 从子页面传回的数据中取值
+      let entryData = returnData.get("entryData") as string;
+      if (entryData) {
+        let items = JSON.parse(entryData);
+        // 清空并重建单据体
+        this.getModel().deleteEntryData("kdtest_reqentryentity");
+        for (let i = 0; i < items.length; i++) {
+          this.getModel().createNewEntryRow("kdtest_reqentryentity");
+          this.getModel().setValue("kdtest_qtyfield", items[i].qty, i);
+          this.getModel().setValue("kdtest_materielfield", items[i].materialId, i);
+        }
+      }
+    }
+    // 刷新界面
+    this.getView().updateView("kdtest_reqentryentity");
+  }
+}
+```
+
+**子页面返回数据**：
+```typescript
+import { HashMap } from "@cosmic/bos-script/java/util";
+
+// 子页面点击确定按钮时，将数据返回给父页面
+click(evt: any): void {
+  let control = evt.getSource();
+  if ("btnok" === control.getKey()) {
+    // 构造返回数据
+    let returnData = new HashMap();
+    let entryList = [];
+    let rowCount = this.getModel().getEntryRowCount("entryentity");
+    for (let i = 0; i < rowCount; i++) {
+      entryList.push({
+        qty: this.getModel().getValue("qtyfield", i),
+        materialId: this.getModel().getValue("materialfield", i)
+      });
+    }
+    returnData.put("entryData", JSON.stringify(entryList));
+
+    // 返回数据并关闭
+    this.getView().returnDataToParent(returnData);
+    this.getView().close();
   }
 }
 ```

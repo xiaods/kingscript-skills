@@ -125,3 +125,103 @@ class MyPlugin extends AbstractPlugin {
 let plugin = new MyPlugin();
 export { plugin };
 ```
+
+## 完整导入参考
+
+按功能分类的常用导入路径，开发时按需选用。
+
+### 插件基类
+
+```typescript
+import { AbstractOperationServicePlugIn } from "@cosmic/bos-core/kd/bos/entity/plugin";
+import { AbstractBillPlugIn } from "@cosmic/bos-core/kd/bos/bill";
+import { AbstractFormPlugin } from "@cosmic/bos-core/kd/bos/form/plugin";
+import { AbstractListPlugin } from "@cosmic/bos-core/kd/bos/list/plugin";
+import { AbstractConvertPlugIn } from "@cosmic/bos-core/kd/bos/entity/botp/plugin";
+import { AbstractReportFormPlugin } from "@cosmic/bos-core/kd/bos/report/plugin";
+import { AbstractReportListDataPlugin } from "@cosmic/bos-core/kd/bos/entity/report";
+import { AbstractPrintPlugin } from "@cosmic/bos-core/kd/bos/print/core/plugin";
+import { WorkflowPlugin, IWorkflowPlugin } from "@cosmic/bos-core/kd/bos/workflow/engine/extitf";
+import { AbstractTask } from "@cosmic/bos-core/kd/bos/schedule";
+import { BatchImportPlugin } from "@cosmic/bos-core/kd/bos/form/plugin/impt";
+```
+
+### 数据类型
+
+```typescript
+import { DynamicObject, DynamicObjectCollection } from "@cosmic/bos-core/kd/bos/dataentity/entity";
+import { LocaleString } from "@cosmic/bos-core/kd/bos/dataentity/entity";
+import { DynamicPropertyCollection } from "@cosmic/bos-core/kd/bos/dataentity/metadata/dynamicobject";
+```
+
+### 数据服务
+
+```typescript
+import { BusinessDataServiceHelper, QueryServiceHelper } from "@cosmic/bos-core/kd/bos/servicehelper";
+import { SaveServiceHelper, OperationServiceHelper } from "@cosmic/bos-core/kd/bos/servicehelper/operation";
+import { DeleteServiceHelper } from "@cosmic/bos-core/kd/bos/servicehelper/operation";
+import { OperateOption } from "@cosmic/bos-core/kd/bos/dataentity";
+import { OperationResult, OperateErrorInfo } from "@cosmic/bos-core/kd/bos/entity/operate/result";
+```
+
+### 过滤与查询
+
+```typescript
+import { QFilter, QCP } from "@cosmic/bos-core/kd/bos/orm/query";
+```
+
+### 校验
+
+```typescript
+import { AbstractValidator, ErrorLevel, ValidationErrorInfo } from "@cosmic/bos-core/kd/bos/entity/validate";
+import { RowDataModel } from "@cosmic/bos-core/kd/bos/entity/formula";
+```
+
+### 表单控件与事件
+
+```typescript
+import { PropertyChangedArgs } from "@cosmic/bos-core/kd/bos/entity/datamodel/events";
+import { BeforeF7SelectEvent, BeforeF7SelectListener } from "@cosmic/bos-core/kd/bos/form/control/events";
+import { ItemClickEvent } from "@cosmic/bos-core/kd/bos/form/control/events";
+import { BasedataEdit } from "@cosmic/bos-core/kd/bos/form/control";
+import { Toolbar } from "@cosmic/bos-core/kd/bos/form/control";
+import { TextEdit, Button } from "@cosmic/bos-core/kd/bos/form/control";
+import { ListShowParameter } from "@cosmic/bos-core/kd/bos/list";
+import { FormShowParameter, BillShowParameter } from "@cosmic/bos-core/kd/bos/form";
+import { ShowType, OperationStatus } from "@cosmic/bos-core/kd/bos/form";
+import { CloseCallBack } from "@cosmic/bos-core/kd/bos/form";
+```
+
+### 上下文
+
+```typescript
+import { RequestContext } from "@cosmic/bos-core/kd/bos/context";
+```
+
+### 消息通知
+
+```typescript
+import { MessageInfo } from "@cosmic/bos-core/kd/bos/workflow/engine/msg/info";
+import { MessageCenterServiceHelper } from "@cosmic/bos-core/kd/bos/servicehelper/workflow";
+```
+
+### Java 工具类
+
+```typescript
+import { ArrayList, HashMap, List, Map } from "@cosmic/bos-script/java/util";
+import { EventObject } from "@cosmic/bos-script/java/util";
+import { StringBuilder } from "@cosmic/bos-script/java/lang";
+```
+
+### 异常处理
+
+```typescript
+import { KDException, ErrorCode } from "@cosmic/bos-core/kd/bos/exception";
+```
+
+### 组织与用户
+
+```typescript
+import { UserServiceHelper } from "@cosmic/bos-core/kd/bos/servicehelper/user";
+import { OrgUnitServiceHelper } from "@cosmic/bos-core/kd/bos/servicehelper/org";
+```
