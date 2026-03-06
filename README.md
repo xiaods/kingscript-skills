@@ -79,8 +79,7 @@ Copy-Item -Path ".\*" -Destination "$env:USERPROFILE\.claude\skills\kingscript-p
 | 文档 | 说明 |
 | :--- | :--- |
 | [**SKILL.md**](SKILL.md) | **核心路由文档** - 插件速查表、关键原则、API 字典、文档索引 |
-| [QUICKSTART.md](QUICKSTART.md) | 3 分钟上手实战指南 |
-| [references/](references/) | 专项手册：[操作插件](references/operation-plugin.md)、[表单插件](references/form-plugin.md)、[列表插件](references/list-plugin.md)、[转换插件](references/convert-plugin.md)、[报表插件](references/report-plugin.md)、[其他插件](references/other-plugins.md)、[ORM接口](references/data-service.md)、[BigDecimal](references/bigdecimal.md)、[常见案例](references/common-examples.md) |
+| [references/](references/) | 专项手册：[操作插件](references/operation-plugin.md)、[表单插件](references/form-plugin.md)、[列表插件](references/list-plugin.md)、[转换插件](references/convert-plugin.md)、[报表插件](references/report-plugin.md)、[其他插件](references/other-plugins.md)、[ORM接口](references/data-service.md)、[BigDecimal](references/bigdecimal.md)、[语法参考](references/syntax.md)、[常见案例](references/common-examples.md) |
 | [scripts/](scripts/) | 基础模板：[表单模板](scripts/form-plugin-template.ts)、[操作模板](scripts/operation-plugin-template.ts) |
 
 ---
