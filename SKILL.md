@@ -221,6 +221,17 @@ import { RequestContext } from "@cosmic/bos-core/kd/bos/context";
 | 发送消息 | `MessageCenterServiceHelper.sendMessage/batchSendMessages` |
 | 显示成功提示 | `this.getView().showSuccessNotification(msg)` |
 | 显示错误提示 | `this.getView().showErrorNotification(msg)` |
+| 刷新视图 | `this.getView().updateView(fieldKey?)` |
+| 页面缓存 | `this.getView().getPageCache().put/get(key, value?)` |
+| 设置单据体选中行 | `this.getModel().setEntryCurrentRowIndex(entryKey, row)` |
+| 获取选中行 | `entryGrid.getSelectRows()` |
+| 抑制值更新事件 | `this.getModel().beginInit()` / `endInit()` |
+| 页面状态判断 | `(this.getView().getFormShowParameter() as BillShowParameter).getStatus()` |
+| 返回数据给父页面 | `this.getView().returnDataToParent(data)` |
+| 忽略验权 | `option.setVariableValue(OperateOptionConst.ISHASRIGHT, "true")` |
+| 克隆数据包 | `new CloneUtils(false, true).clone(data)` |
+| 锁定单据体行 | `entryGrid.setRowLock(true, [0, 1])` |
+| 确认框 | `this.getView().showConfirm(msg, options, callback)` |
 
 ---
 
@@ -255,15 +266,15 @@ import { RequestContext } from "@cosmic/bos-core/kd/bos/context";
 | 需求 | 文档 | 内容 |
 |------|------|------|
 | 语法基础 | [syntax.md](references/syntax.md) | 模块、变量、类型、循环、完整导入列表 |
-| 操作插件 | [operation-plugin.md](references/operation-plugin.md) | 完整事件详解、校验器、事务处理示例 |
-| 表单插件 | [form-plugin.md](references/form-plugin.md) | 完整事件详解、F7过滤（含左树过滤）、弹窗交互、CloseCallBack 回调、字段联动 |
-| 列表插件 | [list-plugin.md](references/list-plugin.md) | 过滤排序、列控制、超链接跳转、用户组织过滤、过滤面板初始化 |
+| 操作插件 | [operation-plugin.md](references/operation-plugin.md) | 完整事件详解、校验器、事务处理、参数传递、忽略验权、操作提示定制 |
+| 表单插件 | [form-plugin.md](references/form-plugin.md) | 完整事件详解、F7过滤（含左树/多选/已选/未审核）、弹窗交互、CloseCallBack、确认框回调、字段联动、富文本/多选基础资料/子单据体、锁定性进阶、beginInit/endInit、单元格行点击、页面缓存/状态/元数据 |
+| 列表插件 | [list-plugin.md](references/list-plugin.md) | 过滤排序、列控制、超链接跳转、用户组织过滤、过滤面板初始化、获取选中行、报表数据获取 |
 | 转换插件 | [convert-plugin.md](references/convert-plugin.md) | 下推条件、源单取值、分单合单 |
 | 报表插件 | [report-plugin.md](references/report-plugin.md) | 报表界面、取数逻辑、DataSet分组统计、条件样式 |
 | 其他插件 | [other-plugins.md](references/other-plugins.md) | 打印、工作流（含动态审批人）、调度任务、引入引出 |
 | 数据服务 | [data-service.md](references/data-service.md) | ORM 查询、保存、QFilter |
 | 精确计算 | [bigdecimal.md](references/bigdecimal.md) | BigDecimal 完整用法 |
-| 开发案例 | [common-examples.md](references/common-examples.md) | 页面弹窗交互、防重复操作、消息通知、完整业务场景 |
+| 开发案例 | [common-examples.md](references/common-examples.md) | 页面弹窗交互、防重复操作、消息通知、数据复制/克隆、操作参数传递、操作提示/刷新、忽略验权、父子页面交互三方案 |
 
 ## 模块缩写对照
 

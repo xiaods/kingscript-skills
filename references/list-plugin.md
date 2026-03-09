@@ -123,6 +123,8 @@ packageData(e: any): void {
 
 列表字段需先在设计器中开启"显示为超链接"。默认点击超链接会打开当前单据详情页，如需跳转到其他单据详情，需要取消默认行为并自行打开目标页面。
 
+> 点击单据列表时同时会触发 `listRowClick` 方法。标准单据列表视图已注册了相关监听器，所以不需要手动注册。
+
 ```typescript
 import { BillShowParameter } from "@cosmic/bos-core/kd/bos/bill";
 import { ShowType, OperationStatus } from "@cosmic/bos-core/kd/bos/form";
@@ -130,32 +132,27 @@ import { ShowType, OperationStatus } from "@cosmic/bos-core/kd/bos/form";
 billListHyperLinkClick(args: any): void {
   super.billListHyperLinkClick(args);
 
-  const fieldKey = args.getFieldName();
+  const fieldKey = args.getHyperLinkClickEvent().getFieldName();
   if (fieldKey === "kdec_product_name") {
     // 取消默认的当前单据详情跳转
     args.setCancel(true);
 
-    // 获取点击行的单据体ID
-    let event = args.getHyperLinkClickEvent();
-    let currentRow = event.getCurrentRow();
-    let entryPkValue = currentRow.getEntryPrimaryKeyValue();
+    let rowIndex = args.getRowIndex();
+    let bl = this.getView().getControl("billlistap") as BillList;
+    let allRows = bl.getCurrentListAllRowCollection();
+    let row = allRows.get(rowIndex);
 
-    // 查询该行的产品ID
-    let product = QueryServiceHelper.queryOne(
-      "kdec_sales_order",
-      "kdec_sales_pro_entry.kdec_product",
-      [new QFilter("kdec_sales_pro_entry.id", QFilter.equals, entryPkValue)]
-    );
+    // 获取点击行数据
+    let pkValue = row.getPrimaryKeyValue();
+    let formID = row.getFormID();
 
-    let productId = product.getLong("kdec_sales_pro_entry.kdec_product");
-
-    // 打开产品详情页（只读模式）
-    let billPara = new BillShowParameter();
-    billPara.setFormId("kdec_product_info");
-    billPara.setPkId(productId);
-    billPara.getOpenStyle().setShowType(ShowType.Modal);
-    billPara.setStatus(OperationStatus.VIEW);
-    this.getView().showForm(billPara);
+    // 打开单据详情
+    let bsp = new BillShowParameter();
+    bsp.setFormId(formID);
+    bsp.setPkId(pkValue);
+    bsp.getOpenStyle().setShowType(ShowType.Modal);
+    bsp.setStatus(OperationStatus.EDIT);
+    this.getView().showForm(bsp);
   }
 }
 ```
@@ -218,6 +215,50 @@ filterContainerBeforeF7Select(e: any): void {
     filter.add(new QFilter("usestatus", QCP.equals, 1)); // 仅显示启用的物料
     e.setCustomQFilters(filter);
   }
+}
+```
+
+---
+
+## 列表获取选中行
+
+```typescript
+// 方式1：通过列表控件获取
+let billlist = this.getView().getControl("billlistap") as BillList;
+let selectedRows = billlist.getSelectedRows();
+
+// 方式2：列表插件自带接口（AbstractListPlugin 实例方法）
+let selectedRows2 = this.getSelectedRows();
+
+// 获取选中行的主键值
+let pkIds = selectedRows.getPrimaryKeyValues();
+```
+
+## 报表数据获取
+
+在报表表单插件中获取报表数据：
+
+```typescript
+// 获取报表控件
+let reportList = this.getView().getControl("reportlistap") as ReportList;
+
+// 获取指定行数据（行号从1开始）
+let rowData = reportList.getReportModel().getRowData(1);
+// 第一行第一列数据
+let cellValue = reportList.getReportModel().getRowData(1).get(0);
+// 通过字段标识取值
+let fieldValue = reportList.getReportModel().getValue(1, "kdtest_field");
+
+// 获取选中行数据
+let selectedRowIndexes = reportList.getEntryState().getSelectedRows(); // int[]
+for (let index of selectedRowIndexes) {
+  let row = reportList.getReportModel().getRowData(index);
+}
+
+// 获取所有行数据
+let rowCount = reportList.getReportModel().getRowCount();
+for (let i = 1; i <= rowCount; i++) {
+  let row = reportList.getReportModel().getRowData(i);
 }
 ```
 

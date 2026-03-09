@@ -4,7 +4,9 @@
       "Bash(pip install:*)",
       "Bash(where python:*)",
       "Bash(python3:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Read(//e/Code/kingscript-skills/**)",
+      "Bash(python -c \":*)"
     ]
   }
 }

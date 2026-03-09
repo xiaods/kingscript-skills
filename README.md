@@ -5,7 +5,7 @@
 **为 AI 助手打造的金蝶苍穹 Kingscript 插件开发全能工具包**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.1.0-green.svg)](SKILL.md)
+[![Version](https://img.shields.io/badge/version-2.2.0-green.svg)](SKILL.md)
 
 [核心能力](#-核心能力) • [安装指南](#-安装指南) • [快速开始](#-快速开始) • [开发规范](#-开发规范)
 
@@ -85,6 +85,7 @@ Copy-Item -Path ".\*" -Destination "$env:USERPROFILE\.claude\skills\kingscript-p
 ---
 
 ## 📊 版本历史
+- **v2.2.0** (2026-03-06): 吸收苍穹开发100个小知识V2.0，新增30+知识点：富文本/多选基础资料/子单据体操作、确认框回调、单元格行点击、数据克隆、操作参数传递、忽略验权、F7多选/已选/未审核、页面缓存/状态/元数据、控件锁定进阶、beginInit/endInit抑制事件。
 - **v2.1.0** (2026-03-06): 新增语法参考文档，完善文档索引，移除过期内容。
 - **v2.0.0** (2026-02-03): 全新重构，支持 10 种插件类型，新增财务计算与 ORM 深度指导。
 - **v1.0.0** (2026-02-02): 初始版本发布。

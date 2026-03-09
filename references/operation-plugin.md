@@ -236,9 +236,9 @@ rollbackOperation(e: $.kd.bos.entity.plugin.args.RollbackOperationArgs): void {
 
 **触发时机**：操作执行完毕，事务提交后
 
-**应用场景**：记录日志、发送通知等非事务性操作
+**应用场景**：记录日志、发送通知、设置自定义操作提示等非事务性操作
 
-**示例**：
+**示例1：发送通知**
 ```typescript
 import { MessageCenterServiceHelper } from "@cosmic/bos-core/kd/bos/servicehelper/workflow";
 import { MessageInfo } from "@cosmic/bos-core/kd/bos/workflow/engine/msg/info";
@@ -249,19 +249,19 @@ afterExecuteOperationTransaction(e: AfterOperationArgs): void {
   let receiver: List = new ArrayList();
   let userId = RequestContext.get().getCurrUserId();
   receiver.add(userId); // 当前登录用户
-  
+
   let messageInfos = new ArrayList();
   let dataentities = e.getDataEntities();
-  
+
   for (let i = 0; i < dataentities.length; i++) {
     let messageInfo: MessageInfo = new MessageInfo();
     let title = new LocaleString("采购申请单已经提交，请注意" + e.getDataEntities()[i].get("billno")) as LocaleString;
     messageInfo.setMessageTitle(title);
-    
+
     let content = new LocaleString("采购申请单已经提交，请注意审批情况") as LocaleString;
     messageInfo.setMessageContent(content);
     messageInfo.setUserIds(receiver);
-    
+
     // 设置通知类型
     messageInfo.setMessageType(MessageInfo.TYPE_MESSAGE);
     messageInfo.setSenderId(userId);
@@ -270,15 +270,90 @@ afterExecuteOperationTransaction(e: AfterOperationArgs): void {
     messageInfo.setBizDataId(e.getDataEntities()[i].getPkValue()); // 业务数据内码集合
     messageInfo.setOperation("customsubmit");
     messageInfo.setTag("submit_notify");
-    
+
     let clientUrl = RequestContext.get().getClientFullContextPath();
     // 设置消息的超链接
     messageInfo.setContentUrl(clientUrl + "?formId=kdtest_reqbill&pkid=" + e.getDataEntities()[0].getPkValue());
-    
+
     messageInfos.add(messageInfo);
   }
-  
+
   let result: Map = MessageCenterServiceHelper.batchSendMessages(messageInfos);
   super.afterExecuteOperationTransaction(e);
 }
+```
+
+**示例2：自定义操作成功提示**
+```typescript
+afterExecuteOperationTransaction(e: AfterOperationArgs): void {
+  if ("save" === e.getOperationKey() && !this.getOperationResult().getSuccessPkIds().isEmpty()) {
+    this.getOperationResult().setMessage("保存成功啦-操作插件");
+  }
+}
+```
+
+> 前提：操作配置中需开启"操作成功后提示"，代码修改提示内容才会弹出显示。
+
+## 操作插件与界面插件参数传递
+
+### 界面插件 → 操作插件
+
+通过 `OperateOption.setVariableValue` / `getVariableValue` 实现双向传参。
+
+```typescript
+// 界面插件：在 beforeDoOperation 中向操作塞参数
+beforeDoOperation(args: $.kd.bos.form.events.BeforeDoOperationEventArgs): void {
+  super.beforeDoOperation(args);
+  let formOperate = args.getSource() as FormOperate;
+  if ("save" === formOperate.getOperateKey()) {
+    formOperate.getOption().setVariableValue("customItem",
+      this.getView().getPageCache().get("customItem"));
+  }
+}
+```
+
+```typescript
+// 操作插件：取出界面传来的参数
+beginOperationTransaction(e: BeginOperationTransactionArgs): void {
+  super.beginOperationTransaction(e);
+  if ("save" === e.getOperationKey()) {
+    let customItem = this.getOption().getVariableValue("customItem");
+    // 使用参数...
+  }
+}
+```
+
+### 操作插件 → 界面插件
+
+```typescript
+// 操作插件：在事务后塞参数
+afterExecuteOperationTransaction(e: AfterOperationArgs): void {
+  if ("save" === e.getOperationKey() && !this.getOperationResult().getSuccessPkIds().isEmpty()) {
+    this.getOption().setVariableValue("allBillNo", "BILL001,BILL002");
+  }
+}
+```
+
+```typescript
+// 界面插件：在 afterDoOperation 中取出参数
+afterDoOperation(e: $.kd.bos.form.events.AfterDoOperationEventArgs): void {
+  super.afterDoOperation(e);
+  let formOperate = e.getSource() as FormOperate;
+  if ("save" === formOperate.getOperateKey() && e.getOperationResult().isSuccess()) {
+    let allBillNo = formOperate.getOption().getVariableValue("allBillNo");
+    // 使用参数...
+  }
+}
+```
+
+## 忽略权限校验
+
+通过 `OperateOption` 传参绕过权限校验（适用于后台自动触发操作的场景）。
+
+```typescript
+import { OperateOptionConst } from "@cosmic/bos-core/kd/bos/dataentity";
+
+let option = OperateOption.create();
+option.setVariableValue(OperateOptionConst.ISHASRIGHT, "true");
+let result = OperationServiceHelper.executeOperate("submit", "kdtest_bill", [data], option);
 ```

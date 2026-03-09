@@ -12,6 +12,11 @@
 - [弹出窗体示例](#弹出窗体示例) - 详情页、弹窗传参、子页面校验保存、防重复操作
 - [多语言处理示例](#多语言处理示例) - LocaleString
 - [性能优化建议](#性能优化建议) - 查询/保存/事务优化
+- [数据复制/克隆](#数据复制克隆) - CloneUtils、逐字段复制
+- [操作插件与界面插件参数传递](#操作插件与界面插件参数传递) - OperateOption 双向传参
+- [操作后刷新与提示](#操作后刷新与提示) - updateView、自定义操作提示
+- [忽略验权执行操作](#忽略验权执行操作) - OperateOptionConst.ISHASRIGHT
+- [父子页面交互三种方案](#父子页面交互三种方案) - 直接修改父页面 / returnDataToParent / PageCache
 - [调试技巧](#调试技巧) - console/debugger/错误捕获
 - [错误处理示例](#错误处理示例) - 统一错误处理、操作结果验证
 
@@ -827,6 +832,230 @@ beginOperationTransaction(e: BeginOperationTransactionArgs): void {
     data.set("result", result);
   }
   // 保存...事务被长时间占用
+}
+```
+
+## 数据复制/克隆
+
+### 方案1：逐字段复制（不推荐，表单新增字段需要迭代代码）
+
+```typescript
+let entityNumber = data.getDataEntityType().getName();
+let newData = BusinessDataServiceHelper.newDynamicObject(entityNumber);
+newData.set("kdtest_field_a", data.get("kdtest_field_a"));
+newData.set("kdtest_remark", "备份数据");
+
+// 复制单据体
+let newCol = newData.getDynamicObjectCollection("entryentity");
+let oldCol = data.getDynamicObjectCollection("entryentity");
+for (let i = 0; i < oldCol.size(); i++) {
+  let oldEntry = oldCol.get(i) as DynamicObject;
+  let newEntry = newCol.addNew() as DynamicObject;
+  newEntry.set("kdtest_textfield", oldEntry.get("kdtest_textfield"));
+}
+
+SaveServiceHelper.saveOperate(entityNumber, [newData], OperateOption.create());
+```
+
+### 方案2：整体克隆（推荐，新增字段无需改代码）
+
+```typescript
+import { CloneUtils } from "@cosmic/bos-core/kd/bos/dataentity/utils";
+
+// false=不复制主键, true=复制子对象
+let newData = new CloneUtils(false, true).clone(data) as DynamicObject;
+newData.set("kdtest_remark", "备份数据");
+SaveServiceHelper.saveOperate(entityNumber, [newData], OperateOption.create());
+```
+
+**适用场景**：操作插件的 `beginOperationTransaction` 事件中，保存前判断是否需要备份。
+
+```typescript
+beginOperationTransaction(e: BeginOperationTransactionArgs): void {
+  super.beginOperationTransaction(e);
+  let dataEntities = e.getDataEntities();
+  for (let data of dataEntities) {
+    let entityNumber = data.getDataEntityType().getName();
+    let pkValue = data.getPkValue();
+    let exists = QueryServiceHelper.exists(entityNumber, pkValue);
+    if (exists) {
+      let newData = new CloneUtils(false, true).clone(data) as DynamicObject;
+      newData.set("kdtest_remark", "备份数据");
+      SaveServiceHelper.saveOperate(entityNumber, [newData], OperateOption.create());
+    }
+  }
+}
+```
+
+## 操作插件与界面插件参数传递
+
+### 界面插件 → 操作插件
+
+```typescript
+// 界面插件：在 beforeDoOperation 中塞参数
+beforeDoOperation(args: $.kd.bos.form.events.BeforeDoOperationEventArgs): void {
+  super.beforeDoOperation(args);
+  let formOperate = args.getSource() as FormOperate;
+  if ("save" === formOperate.getOperateKey()) {
+    formOperate.getOption().setVariableValue("customItem",
+      this.getView().getPageCache().get("customItem"));
+  }
+}
+```
+
+```typescript
+// 操作插件：取出参数
+beginOperationTransaction(e: BeginOperationTransactionArgs): void {
+  super.beginOperationTransaction(e);
+  if ("save" === e.getOperationKey()) {
+    let customItem = this.getOption().getVariableValue("customItem");
+    // 使用参数...
+  }
+}
+```
+
+### 操作插件 → 界面插件
+
+```typescript
+// 操作插件：塞参数
+afterExecuteOperationTransaction(e: AfterOperationArgs): void {
+  if ("save" === e.getOperationKey() && !this.getOperationResult().getSuccessPkIds().isEmpty()) {
+    this.getOption().setVariableValue("allBillNo", "BILL001,BILL002");
+  }
+}
+```
+
+```typescript
+// 界面插件：取出参数
+afterDoOperation(e: $.kd.bos.form.events.AfterDoOperationEventArgs): void {
+  super.afterDoOperation(e);
+  let formOperate = e.getSource() as FormOperate;
+  if ("save" === formOperate.getOperateKey() && e.getOperationResult().isSuccess()) {
+    let allBillNo = formOperate.getOption().getVariableValue("allBillNo");
+    // 使用参数...
+  }
+}
+```
+
+## 操作后刷新与提示
+
+### 操作后刷新指定字段
+
+```typescript
+// 界面插件中实现
+afterDoOperation(e: $.kd.bos.form.events.AfterDoOperationEventArgs): void {
+  super.afterDoOperation(e);
+  let formOperate = e.getSource() as FormOperate;
+  if ("save" === formOperate.getOperateKey()) {
+    if (e.getOperationResult().isSuccess()) {
+      this.getView().updateView("kdtest_statusfield"); // 指定刷新字段
+    }
+  }
+}
+```
+
+### 自定义操作成功后的提示信息
+
+```typescript
+// 方式1：在操作插件中设置
+afterExecuteOperationTransaction(e: AfterOperationArgs): void {
+  if ("save" === e.getOperationKey() && !this.getOperationResult().getSuccessPkIds().isEmpty()) {
+    this.getOperationResult().setMessage("保存成功啦-操作插件");
+  }
+}
+
+// 方式2：在界面插件中设置
+afterDoOperation(e: $.kd.bos.form.events.AfterDoOperationEventArgs): void {
+  super.afterDoOperation(e);
+  let formOperate = e.getSource() as FormOperate;
+  if ("save" === formOperate.getOperateKey() && e.getOperationResult().isSuccess()) {
+    e.getOperationResult().setMessage("保存成功！-界面插件");
+  }
+}
+```
+
+> 前提：需在操作配置中开启"操作成功后提示"，代码修改提示内容才会弹出显示。
+
+## 忽略验权执行操作
+
+通过 `OperateOption` 传递参数绕过权限校验（适用于后台自动触发的操作）。
+
+```typescript
+import { OperateOptionConst } from "@cosmic/bos-core/kd/bos/dataentity";
+
+let option = OperateOption.create();
+option.setVariableValue(OperateOptionConst.ISHASRIGHT, "true");
+let result = OperationServiceHelper.executeOperate("submit", "your_entity", [data], option);
+```
+
+## 父子页面交互三种方案
+
+### 方案1：子页面直接修改父页面数据模型
+
+```typescript
+// 子页面插件
+click(evt: EventObject): void {
+  let control = evt.getSource() as Button;
+  if ("btnok" === control.getKey()) {
+    let goodName = this.getModel().getValue("kdtest_goodname");
+    let parentView = this.getView().getParentView();
+    let parentModel = parentView.getModel();
+    parentModel.setValue("kdtest_remark", goodName);
+    parentView.updateView();
+    // 调用了其他表单的控制方法时，需将指令发给前端
+    this.getView().sendFormAction(this.getView().getParentView());
+    this.getView().close();
+  }
+}
+```
+
+### 方案2：returnDataToParent + closedCallBack（推荐）
+
+```typescript
+// 子页面：返回数据
+click(evt: EventObject): void {
+  let control = evt.getSource() as Button;
+  if ("btnok" === control.getKey()) {
+    let goodName = this.getModel().getValue("kdtest_goodname");
+    this.getView().returnDataToParent(goodName);
+    this.getView().close();
+  }
+}
+```
+
+```typescript
+// 父页面：接收数据
+closedCallBack(e: $.kd.bos.form.events.ClosedCallBackEvent): void {
+  if ("show-childform" === e.getActionId()) {
+    let returnData = e.getReturnData();
+    this.getModel().setValue("kdtest_remark", returnData);
+  }
+  super.closedCallBack(e);
+}
+```
+
+### 方案3：通过页面缓存传递
+
+```typescript
+// 子页面：写入父页面缓存
+click(evt: EventObject): void {
+  let control = evt.getSource() as Button;
+  if ("btnok" === control.getKey()) {
+    let goodName = this.getModel().getValue("kdtest_goodname");
+    this.getView().getParentView().getPageCache().put("name", goodName);
+    this.getView().close();
+  }
+}
+```
+
+```typescript
+// 父页面：从缓存读取
+closedCallBack(e: $.kd.bos.form.events.ClosedCallBackEvent): void {
+  if ("show-childform" === e.getActionId()) {
+    let name = this.getView().getPageCache().get("name") as string;
+    this.getModel().setValue("kdtest_remark", name);
+  }
+  super.closedCallBack(e);
 }
 ```
 

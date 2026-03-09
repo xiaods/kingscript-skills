@@ -268,6 +268,7 @@ update(dataEntities: DynamicObject[], option: OperateOption): void;
 ### DeleteServiceHelper 删除服务
 
 ```typescript
+// 方式1：触发校验的删除（推荐）
 deleteOperate(entityName: string, ids: any[], option: OperateOption): OperationResult;
 ```
 
@@ -280,6 +281,14 @@ if (result.isSuccess()) {
   this.getView().showSuccessNotification("删除成功");
   this.getView().invokeOperation("refresh");
 }
+
+// 也可以通过通用操作接口删除
+let result2 = OperationServiceHelper.executeOperate("delete", entityName, ids, OperateOption.create());
+```
+
+```typescript
+// 方式2：直接从数据库删除，不触发校验（慎用）
+DeleteServiceHelper.delete(dataEntityType, pks);
 ```
 
 ### OperationServiceHelper 操作服务
@@ -315,19 +324,24 @@ class ReqListPlugin extends AbstractListPlugin {
     if (e.getItemKey() == "kdtest_addnew") {
       // 创建空的数据包
       let doj = BusinessDataServiceHelper.newDynamicObject("kdtest_reqbill") as DynamicObject;
-      
+
       // 字段赋值
       doj.set("billstatus", "A");
       doj.set("kdtest_remark", "addnewdemo备注");
       let userId = RequestContext.get().getCurrUserId();
       doj.set("creator", userId);
       doj.set("kdtest_registrant", userId);
-      
+
       // 新增分录数据
       let entrys = doj.getDynamicObjectCollection("kdtest_reqentryentity") as DynamicObjectCollection;
       let entry = entrys.addNew() as DynamicObject;
       entry.set("kdtest_qtyfield", 10);
-      
+
+      // 新增子单据体数据
+      let subEntrys = entry.getDynamicObjectCollection("kdtest_subentryentity");
+      let subEntry = subEntrys.addNew() as DynamicObject;
+      subEntry.set("kdtest_textfield2", "子分录数据");
+
       // 保存
       const result = SaveServiceHelper.saveOperate("kdtest_reqbill", [doj], OperateOption.create());
       if (result.isSuccess()) {
@@ -377,18 +391,18 @@ itemClick(e: ItemClickEvent): void {
     let billlist = this.getView().getControl("billlistap") as BillList;
     let selectedRows = billlist.getSelectedRows();
     let pkIds = selectedRows.getPrimaryKeyValues();
-    
+
     let billnoQfilter = new QFilter("id", QCP.in, pkIds);
     let selectfieids = "id,billno,kdtest_reqentryentity.kdtest_qtyfield,kdtest_reqentryentity.kdtest_materielfield";
-    
+
     // 使用BusinessDataServiceHelper.load查询，返回结构化的数据包，可保存
     let laodobjs = BusinessDataServiceHelper.load("kdtest_reqbill", selectfieids, [billnoQfilter], "billno asc", 10);
-    
+
     if (laodobjs != null) {
       for (let i = 0; i < laodobjs.length; i++) {
         let obj = laodobjs[i];
         let entrys = obj.getDynamicObjectCollection("kdtest_reqentryentity") as DynamicObjectCollection;
-        
+
         if (entrys != null && entrys.size() > 0) {
           for (let j = 0; j < entrys.size(); j++) {
             let entry = entrys.get(j);
@@ -397,13 +411,87 @@ itemClick(e: ItemClickEvent): void {
           }
         }
       }
-      
+
       let reslut = SaveServiceHelper.saveOperate("kdtest_reqbill", laodobjs, OperateOption.create());
       if (reslut.isSuccess()) {
         this.getView().showSuccessNotification("编辑保存成功");
         this.getView().invokeOperation("refresh");
       }
     }
+  }
+}
+```
+
+### 查询复杂字段（基础资料属性）
+
+```typescript
+// 使用基础资料的属性字段做过滤条件（用"."连接）
+let filter = new QFilter("creator.name", QCP.equals, "张三");
+
+// BusinessDataServiceHelper：返回结构化数据
+let data = BusinessDataServiceHelper.loadSingle("kdtest_bill",
+  "id,billno,creator,creator.id,createtime",
+  [filter]);
+let creator = data.getDynamicObject("creator");
+let creatorId = data.getLong("creator.id");
+
+// QueryServiceHelper：返回平铺数据
+let flatData = QueryServiceHelper.queryOne("kdtest_bill",
+  "id,billno,creator,creator.id,createtime",
+  [filter]);
+let creatorObj = flatData.getDynamicObject("creator");
+```
+
+### 查询单据体字段
+
+```typescript
+// 过滤条件使用单据体字段时，需要加上单据体标识前缀
+let filter = new QFilter("entryentity.kdtest_dealuser.name", QCP.equals, "金小蝶");
+
+// BusinessDataServiceHelper：查询字段可不用加单据体标识
+let data = BusinessDataServiceHelper.loadSingle("kdtest_bill",
+  "id,billno,kdtest_dealuser,kdtest_dealdesc",
+  [filter]);
+let cols = data.getDynamicObjectCollection("entryentity");
+for (let i = 0; i < cols.size(); i++) {
+  let col = cols.get(i) as DynamicObject;
+  let user = col.getDynamicObject("kdtest_dealuser");
+  let name = user.getString("name"); // 默认有 id, number, name
+  let desc = col.getString("kdtest_dealdesc");
+}
+
+// QueryServiceHelper：查询字段需要加单据体标识
+let flatDataList = QueryServiceHelper.query("kdtest_bill",
+  "id,billno,entryentity.kdtest_dealuser.name,entryentity.kdtest_dealdesc",
+  [filter], "");
+for (let i = 0; i < flatDataList.size(); i++) {
+  let row = flatDataList.get(i) as DynamicObject;
+  let userName = row.get("entryentity.kdtest_dealuser.name");
+}
+```
+
+### 查询子单据体字段
+
+```typescript
+// 子单据体字段查询
+let filter = new QFilter("entryentity.kdtest_dealuser.name", QCP.equals, "金小蝶");
+let data = BusinessDataServiceHelper.loadSingle("kdtest_bill",
+  "id,billno,kdtest_dealuser,kdtest_dealdesc,kdtest_subdealuser,kdtest_subdec",
+  [filter]);
+
+let cols = data.getDynamicObjectCollection("entryentity");
+for (let i = 0; i < cols.size(); i++) {
+  let col = cols.get(i) as DynamicObject;
+  // 单据体字段
+  let user = col.getDynamicObject("kdtest_dealuser");
+  let desc = col.getString("kdtest_dealdesc");
+
+  // 获取子单据体
+  let subCols = col.getDynamicObjectCollection("kdtest_subentryentity");
+  for (let j = 0; j < subCols.size(); j++) {
+    let subCol = subCols.get(j) as DynamicObject;
+    let subUser = subCol.getDynamicObject("kdtest_subdealuser");
+    let subDesc = subCol.getString("kdtest_subdec");
   }
 }
 ```

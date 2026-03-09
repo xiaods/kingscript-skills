@@ -6,7 +6,11 @@
 - [插件事件总览](#插件事件总览) - 打开前/初始化/交互/关闭事件表
 - [常见事件详解](#常见事件详解) - preOpenForm、afterCreateNewData、afterLoadData、afterBindData、itemClick、beforeF7Select、propertyChanged 等
 - [父子页面弹窗及交互](#父子页面弹窗及交互) - 弹窗传参、CloseCallBack 回调
-- [关键API汇总](#关键api汇总) - 模型/视图/上下文 API
+- [富文本/多选基础资料/子单据体](#富文本控件操作) - 特殊控件与数据结构操作
+- [页面状态/锁定/选中行/触发控件](#页面状态判断) - 界面控制进阶
+- [赋值不触发事件/确认框/单元格行点击](#赋值不触发值更新事件) - 交互进阶模式
+- [修改控件名称/元数据/关闭控制/F7进阶](#修改控件名称) - 高级API
+- [关键API汇总](#关键api汇总) - 模型/视图/上下文/缓存/刷新 API
 
 ---
 
@@ -633,6 +637,332 @@ click(evt: any): void {
 }
 ```
 
+## 富文本控件操作
+
+富文本控件是通用控件（非实体字段），不能通过 `this.getModel()` 取值赋值，需要通过控件模型操作。
+
+```typescript
+// 获取富文本内容
+let richEdit = this.getView().getControl("richtexteditorap") as RichTextEditor;
+let text = richEdit.getText();
+
+// 设置富文本内容
+richEdit.setText("要设置的内容");
+```
+
+**持久化模式**：富文本内容需要保存到大文本字段，打开时再加载到控件。
+
+```typescript
+// 保存时：将富文本内容存到大文本字段
+beforeDoOperation(e: $.kd.bos.form.events.BeforeDoOperationEventArgs): void {
+  let formOperate = e.getSource() as FormOperate;
+  if (formOperate.getOperateKey() === "save") {
+    let richEdit = this.getView().getControl("richtexteditorap") as RichTextEditor;
+    let text = richEdit.getText();
+    this.getModel().setValue("kdtest_longtextfield", text);
+  }
+}
+
+// 打开时：从大文本字段加载到富文本控件
+afterBindData(e: EventObject): void {
+  super.afterBindData(e);
+  let richEdit = this.getView().getControl("richtexteditorap") as RichTextEditor;
+  let content = this.getModel().getValue("kdtest_longtextfield") as string;
+  if (content) {
+    richEdit.setText(content);
+  }
+}
+```
+
+## 多选基础资料操作
+
+多选基础资料通过 model 获取的是数据集合，需遍历取出实际选择的基础资料对象。
+
+```typescript
+// 读取多选基础资料
+let multiCols = this.getModel().getValue("kdtest_mulbasedatafield") as DynamicObjectCollection;
+for (let i = 0; i < multiCols.size(); i++) {
+  let col = multiCols.get(i) as DynamicObject;
+  let baseData = col.getDynamicObject("fbasedataid"); // 值存储在fbasedataid属性
+  let name = baseData.getString("name");
+}
+
+// 赋值参考：https://vip.kingdee.com/article/198799132897594368?productLineId=29
+```
+
+## 子单据体操作
+
+子单据体挂在单据体行上，需要先获取单据体行，再从行获取子单据体集合。
+
+```typescript
+// 获取子单据体字段值（指定行号）
+// 第一个整数是子单据体行号，第二个是父单据体行号
+let value = this.getModel().getValue("kdtest_textfield2", 0, 0);
+
+// 遍历子单据体
+let dataEntity = this.getModel().getDataEntity(true);
+let entryRows = dataEntity.getDynamicObjectCollection("entryentity");
+for (let i = 0; i < entryRows.size(); i++) {
+  let entryObj = entryRows.get(i) as DynamicObject;
+  let subCols = entryObj.getDynamicObjectCollection("kdtest_subentryentity");
+  for (let j = 0; j < subCols.size(); j++) {
+    let subCol = subCols.get(j) as DynamicObject;
+    let fieldValue = subCol.get("kdtest_textfield2");
+  }
+}
+
+// 给子单据体新建行
+// 先设置父单据体选中行
+this.getModel().setEntryCurrentRowIndex("entryentity", 0);
+// 创建子单据体行
+let newRows = this.getModel().batchCreateNewEntryRow("kdtest_subentryentity", 1);
+for (let index of newRows) {
+  this.getModel().setValue("kdtest_textfield2", "文本值", index);
+}
+```
+
+## 页面状态判断
+
+判断当前页面是新增还是编辑状态：
+
+```typescript
+import { BillShowParameter } from "@cosmic/bos-core/kd/bos/bill";
+import { OperationStatus } from "@cosmic/bos-core/kd/bos/form";
+
+afterBindData(e: EventObject): void {
+  super.afterBindData(e);
+  let bsp = this.getView().getFormShowParameter() as BillShowParameter;
+  if (bsp.getStatus() == OperationStatus.ADDNEW) {
+    this.getView().showTipNotification("您正在新增单据");
+  } else if (bsp.getStatus() == OperationStatus.EDIT) {
+    this.getView().showTipNotification("您正在编辑单据");
+  }
+}
+```
+
+## 控件锁定性进阶场景
+
+```typescript
+// 锁定单据头字段
+this.getView().setEnable(false, "字段标识");
+
+// 锁定单据体某几行（所有字段都锁定）
+let entryGrid = this.getView().getControl("entryentity") as EntryGrid;
+entryGrid.setRowLock(true, [0, 1]); // 锁定第0行和第1行
+
+// 锁定单据体某行某列
+this.getView().setEnable(false, 2, "kdtest_dealdesc"); // 第2行的dealdesc字段
+
+// 锁定整列（遍历所有行）
+let rowCount = this.getModel().getEntryRowCount("entryentity");
+for (let i = 0; i < rowCount; i++) {
+  this.getView().setEnable(false, i, "kdtest_dealdesc");
+}
+
+// 锁定整个单据体
+this.getView().setEnable(false, "entryentity");
+```
+
+## 设置单据体选中行
+
+```typescript
+// 设置默认选中第一行
+let entryRowCount = this.getModel().getEntryRowCount("entryentity");
+if (entryRowCount > 0) {
+  let eg = this.getView().getControl("entryentity") as EntryGrid;
+  eg.selectRows(0);
+}
+
+// 通过model设置当前行
+this.getModel().setEntryCurrentRowIndex("entryentity", rowIndex);
+
+// 获取当前选中行
+let currentRow = this.getModel().getEntryCurrentRowIndex("entryentity");
+
+// 获取所有选中行
+let entryGrid = this.getView().getControl("entryentity") as EntryGrid;
+let selectRows = entryGrid.getSelectRows(); // 返回 int[]
+```
+
+## 代码触发控件操作
+
+```typescript
+// 触发工具栏按钮点击
+let toolbar = this.getView().getControl("tbmain") as Toolbar;
+toolbar.itemClick("bar_save", "save"); // 工具栏项标识, 操作标识
+
+// 触发按钮点击
+let button = this.getView().getControl("kdtest_btsave") as Button;
+button.click();
+
+// 触发操作
+this.getView().invokeOperation("save");
+```
+
+## 赋值不触发值更新事件
+
+在某些场景下，代码赋值后不希望触发 `propertyChanged` 事件：
+
+```typescript
+// 方式1：在 afterCreateNewData 中赋值，天然不触发值更新事件
+
+// 方式2：在其他事件中使用 beginInit/endInit 包裹
+this.getModel().beginInit();
+this.getModel().setValue("字段标识", "字段值");
+this.getModel().endInit();
+```
+
+## 确认框回调模式
+
+拦截操作前弹出确认提示，用户确认后再继续执行。
+
+```typescript
+import { ConfirmCallBackListener, MessageBoxOptions, MessageBoxResult } from "@cosmic/bos-core/kd/bos/form";
+
+// 在 beforeItemClick 中弹出确认框
+beforeItemClick(evt: BeforeItemClickEvent): void {
+  if (evt.getItemKey() === "bar_submit") {
+    evt.setCancel(true); // 先取消操作
+    let confirmListener = new ConfirmCallBackListener("submitconfirm", this);
+    this.getView().showConfirm(
+      "您确认提交该单据吗？",
+      MessageBoxOptions.YesNoCancel,
+      confirmListener
+    );
+  }
+  super.beforeItemClick(evt);
+}
+
+// 确认框回调
+confirmCallBack(e: $.kd.bos.form.events.MessageBoxClosedEvent): void {
+  super.confirmCallBack(e);
+  if ("submitconfirm" === e.getCallBackId()) {
+    if (MessageBoxResult.Yes === e.getResult()) {
+      this.getView().invokeOperation("submit"); // 确认则执行提交
+    } else if (MessageBoxResult.No === e.getResult()) {
+      // 否 的处理逻辑
+    }
+  }
+}
+```
+
+## 单据体单元格点击
+
+监听单据体中单元格的点击事件（需注册监听器）。
+
+```typescript
+// 注册监听器
+registerListener(e: EventObject): void {
+  super.registerListener(e);
+  let eg = this.getView().getControl("entryentity") as EntryGrid;
+  eg.addCellClickListener(this);
+}
+
+// 实现 cellClick
+cellClick(arg: $.kd.bos.form.control.events.CellClickEvent): void {
+  let fieldKey = arg.getFieldKey();
+  if (fieldKey === "kdtest_urlfield") {
+    let url = this.getModel().getValue(fieldKey, arg.getRow()) as string;
+    this.getView().openUrl(url);
+    // 或 this.getView().download(url);
+  }
+}
+```
+
+## 单据体行点击
+
+```typescript
+registerListener(e: EventObject): void {
+  super.registerListener(e);
+  let eg = this.getView().getControl("entryentity") as EntryGrid;
+  eg.addRowClickListener(this);
+}
+
+// 实现 RowClickEventListener 的 entryRowClick 方法
+entryRowClick(e: any): void {
+  let rowIndex = e.getRow();
+  let material = this.getModel().getValue("kdtest_material", rowIndex);
+  if (material == null) {
+    this.getView().showTipNotification("请先选择物品");
+  }
+}
+```
+
+## 修改控件名称
+
+```typescript
+// 修改字段控件名称
+let textField = this.getView().getControl("kdtest_textfield1") as TextEdit;
+textField.setCaption(new LocaleString("新标题"));
+
+// 同步修改元数据属性标题（避免退出时提示旧名称）
+let allFields = this.getModel().getDataEntityType().getAllFields();
+let field = allFields.get("kdtest_textfield1");
+field.getDisplayName().setLocaleValue("新标题");
+
+// 修改非字段控件名称（按钮、面板等）
+let metaMap = new HashMap();
+let textMap = new HashMap();
+textMap.put("zh_CN", "新名称");
+metaMap.put("text", textMap);
+this.getView().updateControlMetadata("控件标识", metaMap);
+```
+
+## 获取元数据信息
+
+```typescript
+// 根据表单编码获取表单元数据
+let formId = MetadataDao.getIdByNumber("kdtest_form", MetaCategory.Form);
+let formMeta = MetadataDao.readRuntimeMeta(formId, MetaCategory.Form) as FormMetadata;
+
+// 遍历所有控件
+let items = formMeta.getItems();
+for (let item of items) {
+  let visible = item.getVisible();
+  let name = item.getName().getLocaleValue();
+  let key = item.getKey();
+}
+```
+
+## beforeClosed - 关闭前控制
+
+```typescript
+// 取消关闭时"是否保存"的校验
+beforeClosed(e: $.kd.bos.form.events.BeforeClosedEvent): void {
+  super.beforeClosed(e);
+  e.setCheckDataChange(false); // 不检查数据变更
+}
+```
+
+## beforeF7Select 进阶
+
+### 显示未审核数据
+```typescript
+beforeF7Select(evt: BeforeF7SelectEvent): void {
+  if ("kdtest_basedatafield" === evt.getProperty().getName()) {
+    let showParam = evt.getFormShowParameter() as ListShowParameter;
+    showParam.setShowApproved(false); // 显示未审核的数据
+  }
+}
+```
+
+### 开启多选 + 显示已选
+```typescript
+beforeF7Select(evt: BeforeF7SelectEvent): void {
+  if ("kdtest_basedatafield" === evt.getProperty().getName()) {
+    let showParam = evt.getFormShowParameter() as ListShowParameter;
+
+    let baseData = this.getModel().getValue("kdtest_basedatafield") as DynamicObject;
+    if (baseData != null) {
+      // 设置已选数据
+      showParam.setSelectedRow(baseData.getPkValue());
+      showParam.setSelectedRows([baseData.getPkValue()]);
+      showParam.setMultiSelect(true); // 开启多选
+    }
+  }
+}
+```
+
 ## 关键API汇总
 
 ### 获取模型数据
@@ -687,6 +1017,41 @@ RequestContext.get().getCurrUserId(): number
 
 // 获取客户端完整路径
 RequestContext.get().getClientFullContextPath(): string
+```
+
+### 刷新视图
+```typescript
+// 刷新单个字段
+this.getView().updateView("字段标识");
+
+// 刷新单据体字段（指定行）
+this.getView().updateView("单据体字段标识", rowIndex);
+
+// 刷新整个单据体
+this.getView().updateView("entryentity");
+
+// 全局刷新（慎用，有性能消耗）
+this.getView().updateView();
+
+// 从数据库刷新整个页面数据
+this.getView().invokeOperation("refresh");
+```
+
+### 页面关闭
+```typescript
+// 关闭当前页面
+this.getView().close();
+// 或者
+this.getView().invokeOperation("close");
+```
+
+### 页面缓存
+```typescript
+// 存入缓存
+this.getView().getPageCache().put("myKey", "myValue");
+
+// 读取缓存
+let value = this.getView().getPageCache().get("myKey") as string;
 ```
 
 ### ORM查询
