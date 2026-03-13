@@ -16,7 +16,7 @@
 # 设置参数
 $skillName = "kingscript-plugin-dev"
 $skillDir = $PSScriptRoot
-$outputFile = "$PSScriptRoot\$skillName.skill"
+$outputFile = "$PSScriptRoot\$skillName.skill.zip"
 
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host "Kingscript插件开发Skill打包工具" -ForegroundColor Cyan
@@ -31,7 +31,7 @@ if (-not (Test-Path "$skillDir\SKILL.md")) {
 
 # 删除旧的.skill文件（如果存在）
 if (Test-Path $outputFile) {
-    Write-Host "发现旧的.skill文件，正在删除..." -ForegroundColor Yellow
+    Write-Host "`n删除旧的.skill.zip文件（如果存在）" -ForegroundColor Yellow
     Remove-Item $outputFile -Force
     Write-Host " 已删除旧文件" -ForegroundColor Green
 }
@@ -48,7 +48,7 @@ if (Get-Command 7z -ErrorAction SilentlyContinue) {
 
 # 准备打包（排除不必要的文件）
 $excludePatterns = @(
-    "*.skill",
+    "*.skill.zip",
     "package-skill.ps1",
     ".git",
     "node_modules",
@@ -113,15 +113,9 @@ try {
                     Copy-Item $file.FullName -Destination $targetPath -Force
                 }
 
-                # 从临时目录创建压缩包（先创建.zip文件）
-                $tempZip = "$outputFile.zip"
+                # 从临时目录创建压缩包
                 $itemsToCompress = Get-ChildItem -Path $tempDir -Recurse
-                Compress-Archive -Path "$tempDir\*" -DestinationPath $tempZip -CompressionLevel Optimal -Force
-                
-                # 重命名为.skill文件
-                if (Test-Path $tempZip) {
-                    Move-Item $tempZip $outputFile -Force
-                }
+                Compress-Archive -Path "$tempDir\*" -DestinationPath $outputFile -CompressionLevel Optimal -Force
             } finally {
                 # 清理临时目录
                 if (Test-Path $tempDir) {
